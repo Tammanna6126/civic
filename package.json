@@ -1,0 +1,10 @@
+{
+  "name": "civic-intelligence",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CIVIC INTELLIGENCE — AI-Powered Smart City Infrastructure Management Platform",
+  "scripts": {
+    "build": "cd client && npm install && npm run build",
+    "start": "cd client && npm run preview"
+  }
+}
