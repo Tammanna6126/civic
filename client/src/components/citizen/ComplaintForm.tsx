@@ -32,6 +32,7 @@ export const ComplaintForm: React.FC<Props> = ({ onSuccess }) => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successTicket, setSuccessTicket] = useState<string | null>(null);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -44,13 +45,17 @@ export const ComplaintForm: React.FC<Props> = ({ onSuccess }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccessTicket(null);
 
-    if (title.trim().length < 5) {
-      setError('Title must be at least 5 characters long.');
+    const cleanTitle = title.trim();
+    const cleanDesc = description.trim();
+
+    if (cleanTitle.length < 3) {
+      setError('Please provide an issue title (at least 3 characters).');
       return;
     }
-    if (description.trim().length < 10) {
-      setError('Please provide at least 10 characters describing the issue.');
+    if (cleanDesc.length < 5) {
+      setError('Please provide a brief description (at least 5 characters).');
       return;
     }
 
@@ -59,76 +64,36 @@ export const ComplaintForm: React.FC<Props> = ({ onSuccess }) => {
 
       let uploadedUrl: string | undefined = undefined;
       if (imageFile) {
-        uploadedUrl = await uploadComplaintImage(imageFile);
+        try {
+          uploadedUrl = await uploadComplaintImage(imageFile);
+        } catch (imgErr) {
+          console.warn('Image processing fallback:', imgErr);
+        }
       }
 
-      let submittedComplaint: Complaint | null = null;
+      const res = await api.submitComplaint({
+        title: cleanTitle,
+        description: cleanDesc,
+        category,
+        latitude,
+        longitude,
+        address,
+        landmark,
+        ward_or_zone: ward,
+        imageUrl: uploadedUrl
+      });
 
-      // 1. Try backend API with AI triage engine
-      try {
-        const res = await api.submitComplaint({
-          title,
-          description,
-          category,
-          latitude,
-          longitude,
-          address,
-          landmark,
-          ward_or_zone: ward,
-          imageUrl: uploadedUrl
-        });
-
-        if (res.success && res.complaint) {
-          submittedComplaint = res.complaint;
-        }
-      } catch (apiErr: any) {
-        console.warn('Backend API submission error, attempting direct Supabase storage:', apiErr.message);
-
-        // 2. Direct Supabase Fallback (works on Vercel or when backend is sleeping)
-        const ticketNumber = `CIVIC-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-        const { data: dbData, error: dbError } = await supabase
-          .from('complaints')
-          .insert({
-            ticket_number: ticketNumber,
-            title,
-            description,
-            category,
-            latitude,
-            longitude,
-            address,
-            landmark: landmark || null,
-            ward_or_zone: ward,
-            status: 'submitted',
-            priority_score: 75,
-            priority_tier: 'high',
-            is_duplicate: false
-          })
-          .select()
-          .single();
-
-        if (dbError) {
-          throw new Error(dbError.message || apiErr.message || 'Database insert failed.');
-        }
-
-        submittedComplaint = dbData as Complaint;
-      }
-
-      if (submittedComplaint) {
-        // Reset form
+      if (res.success && res.complaint) {
+        setSuccessTicket(res.complaint.ticket_number);
         setTitle('');
         setDescription('');
         setImageFile(null);
         setImagePreview(null);
-        onSuccess(submittedComplaint);
+        onSuccess(res.complaint);
       }
     } catch (err: any) {
       console.error('Submission failed:', err);
-      const isRls = err.message?.includes('violates row-level security policy');
-      setError(
-        isRls
-          ? 'Database security rule active: Please disable RLS in Supabase SQL Editor (see guide in chat) so anyone can submit complaints.'
-          : err.message || 'Failed to submit complaint. Please try again.'
-      );
+      setError(err.message || 'Failed to submit complaint. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -136,6 +101,18 @@ export const ComplaintForm: React.FC<Props> = ({ onSuccess }) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {successTicket && (
+        <div className="p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-sm flex items-center space-x-3 animate-slide-up shadow-lg shadow-emerald-500/10">
+          <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+          <div>
+            <div className="font-bold text-white">Complaint Raised Successfully!</div>
+            <div className="text-xs text-emerald-400 mt-0.5">
+              Ticket Number: <span className="font-mono font-bold text-white">{successTicket}</span> is now active in the system.
+            </div>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center space-x-2">
           <AlertCircle className="w-4 h-4 shrink-0" />

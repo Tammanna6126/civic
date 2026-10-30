@@ -17,7 +17,7 @@ export const CreateComplaintSchema = z.object({
   address: z.string().min(3, 'Address is required'),
   landmark: z.string().optional(),
   ward_or_zone: z.string().default('Central Zone'),
-  imageUrl: z.string().url().optional().or(z.literal('')),
+  imageUrl: z.string().optional().or(z.literal('')),
   citizen_id: z.string().uuid().optional()
 });
 
